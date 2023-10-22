@@ -1,10 +1,11 @@
-﻿using FavoriteCars.Models;
-using FavoriteCars.RequestResponseObjects;
+﻿using FavoriteCars.RequestResponseObjects;
 using FavoriteCars.Utililities;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.CodeAnalysis.Scripting;
 using Microsoft.EntityFrameworkCore;
+using Models;
+using Services;
 
 namespace FavoriteCars.Controllers
 {
@@ -12,13 +13,10 @@ namespace FavoriteCars.Controllers
     [ApiController]
     public class AuthController : ControllerBase
     {
-        private readonly DatabaseContext _context;
         private readonly JwtSettings _jwtSettings;
-        
 
-        public AuthController(DatabaseContext context, JwtSettings jwtSettings)
+        public AuthController(JwtSettings jwtSettings)
         {
-            _context = context;
             _jwtSettings = jwtSettings;
         }
 
@@ -26,18 +24,11 @@ namespace FavoriteCars.Controllers
         [HttpPost("Login")]
         public async Task<ActionResult> Login(AuthLoginRequest request)
         {
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == request.Username);
+            var user = await UsersService.VerifyUserCredentials(request.Username, request.Password);
 
             if (user == null)
             {
-                return BadRequest("Invalid credentials");
-            }
-
-            bool passwordCorrect = BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash);
-
-            if(!passwordCorrect)
-            {
-                return BadRequest("Invalid credentials");
+                return BadRequest("Invalid user credentials");
             }
 
             var token = _jwtSettings.GenerateJwt(request.Username);
@@ -49,7 +40,9 @@ namespace FavoriteCars.Controllers
         [HttpPost("Register")]
         public async Task<ActionResult> Register(AuthRegisterRequest request)
         {
-            if(UsernameExists(request.Username)) {
+            var usernameExists = await UsersService.UsernameExists(request.Username);
+
+            if (usernameExists) {
                 return BadRequest("Username taken");
             }
 
@@ -63,23 +56,21 @@ namespace FavoriteCars.Controllers
                 return BadRequest("Passwords dont match");
             }
 
-
             var user = new User()
             {
-                Username = request.Username,
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password)
+                Username = request.Username
             };
 
-            _context.Users.Add(user);
+            var success = await UsersService.InsertUser(user, request.Password);
 
-            await _context.SaveChangesAsync();
-
-            return Ok();
-        }
-
-        private bool UsernameExists(string username)
-        {
-            return (_context.Users?.Any(u => u.Username == username)).GetValueOrDefault();
+            if (success)
+            {
+                return NoContent();
+            }
+            else
+            {
+                return BadRequest();
+            }
         }
     }
 }

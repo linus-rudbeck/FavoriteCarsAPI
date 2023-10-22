@@ -1,4 +1,4 @@
-﻿namespace FavoriteCars.Models
+﻿namespace Models
 {
     public class Car
     {

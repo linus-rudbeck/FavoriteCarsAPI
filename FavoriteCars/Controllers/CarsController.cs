@@ -5,25 +5,23 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using FavoriteCars.Models;
+using Models;
 using FavoriteCars.Utililities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
+using Services;
 
 namespace FavoriteCars.Controllers
 {
-    [Authorize]
     [Route("api/[controller]")]
     [ApiController]
     public class CarsController : ControllerBase
     {
-        private readonly DatabaseContext _context;
         private readonly IHubContext<RealTimeHub> _hubContext;
         private readonly JwtSettings _jwtSettings;
 
-        public CarsController(DatabaseContext context, IHubContext<RealTimeHub> hubContext, JwtSettings jwtSettings)
+        public CarsController(IHubContext<RealTimeHub> hubContext, JwtSettings jwtSettings)
         {
-            _context = context;
             _hubContext = hubContext;
             _jwtSettings = jwtSettings;
         }
@@ -32,22 +30,16 @@ namespace FavoriteCars.Controllers
         [HttpGet]
         public async Task<ActionResult<IEnumerable<Car>>> GetCars()
         {
-          if (_context.Cars == null)
-          {
-              return NotFound();
-          }
-            return await _context.Cars.ToListAsync();
+            var cars = await CarsService.GetAllCars();
+
+            return Ok(cars);
         }
 
         // GET: api/Cars/5
         [HttpGet("{id}")]
         public async Task<ActionResult<Car>> GetCar(int id)
         {
-          if (_context.Cars == null)
-          {
-              return NotFound();
-          }
-            var car = await _context.Cars.FindAsync(id);
+            var car = await CarsService.GetCarById(id);
 
             if (car == null)
             {
@@ -67,25 +59,17 @@ namespace FavoriteCars.Controllers
                 return BadRequest();
             }
 
-            _context.Entry(car).State = EntityState.Modified;
+            var success = await CarsService.UpdateCar(car);
 
-            try
+            if (success)
             {
-                await _context.SaveChangesAsync();
+                return NoContent();
             }
-            catch (DbUpdateConcurrencyException)
+            else
             {
-                if (!CarExists(id))
-                {
-                    return NotFound();
-                }
-                else
-                {
-                    throw;
-                }
+                return BadRequest();
             }
 
-            return NoContent();
         }
 
         // POST: api/Cars
@@ -93,42 +77,40 @@ namespace FavoriteCars.Controllers
         [HttpPost]
         public async Task<ActionResult<Car>> PostCar(Car car)
         {
-          if (_context.Cars == null)
-          {
-              return Problem("Entity set 'DatabaseContext.Cars'  is null.");
-          }
-            _context.Cars.Add(car);
-            await _context.SaveChangesAsync();
+            var success = await CarsService.InsertCar(car);
 
-            return CreatedAtAction("GetCar", new { id = car.Id }, car);
+            if (success)
+            {
+                return NoContent();
+            }
+            else
+            {
+                return BadRequest();
+            }
         }
 
         // DELETE: api/Cars/5
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteCar(int id)
         {
-            if (_context.Cars == null)
-            {
-                return NotFound();
-            }
-            var car = await _context.Cars.FindAsync(id);
+            var car = await CarsService.GetCarById(id);
+
             if (car == null)
             {
                 return NotFound();
             }
 
-            _context.Cars.Remove(car);
-            await _context.SaveChangesAsync();
+            await CarsService.DeleteCar(car);
 
-            return NoContent();
+            return Ok();
         }
 
         [HttpPost("{id}/Like"), Authorize]
         public async Task<ActionResult> LikeCar(int id)
         {
-            var car = await _context.Cars.FindAsync(id);
+            var car = await CarsService.GetCarById(id);
 
-            if(car == null)
+            if (car == null)
             {
                 return NotFound();
             }
@@ -160,19 +142,14 @@ namespace FavoriteCars.Controllers
 
             var username = _jwtSettings.GetUsername(token);
 
-            if(string.IsNullOrEmpty(username))
+            if (string.IsNullOrEmpty(username))
             {
                 return null;
             }
 
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == username);
+            var user = await UsersService.GetUserByUsername(username);
 
             return user;
-        }
-
-        private bool CarExists(int id)
-        {
-            return (_context.Cars?.Any(e => e.Id == id)).GetValueOrDefault();
         }
     }
 }

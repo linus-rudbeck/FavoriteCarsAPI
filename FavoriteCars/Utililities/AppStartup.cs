@@ -8,8 +8,6 @@ namespace FavoriteCars.Utililities
 {    
     public class AppStartup
     {
-        private const string DB_CONTEXT_NAME = "DatabaseConnection";
-
         private WebApplication app;
 
         public AppStartup(string[] args) {
@@ -21,9 +19,6 @@ namespace FavoriteCars.Utililities
             var builder = WebApplication.CreateBuilder(args);
 
             SetupSwagger(builder);
-
-            string connectionString = builder.Configuration.GetConnectionString(DB_CONTEXT_NAME);
-            builder.Services.AddDbContext<DatabaseContext>( o => o.UseSqlite(connectionString) );
 
             builder.Services.AddControllers();
 
